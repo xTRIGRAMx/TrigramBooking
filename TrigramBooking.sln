@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.37111.16 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TrigramBooking.Console", "TrigramBooking.Console\TrigramBooking.Console.csproj", "{AF6878DB-7A39-49BF-A2A6-E3096F2ACFA5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TrigramBooking.API", "TrigramBooking.API\TrigramBooking.API.csproj", "{8B9B8290-49D1-42E4-B85C-FE3373E80313}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{AF6878DB-7A39-49BF-A2A6-E3096F2ACFA5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AF6878DB-7A39-49BF-A2A6-E3096F2ACFA5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AF6878DB-7A39-49BF-A2A6-E3096F2ACFA5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AF6878DB-7A39-49BF-A2A6-E3096F2ACFA5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8B9B8290-49D1-42E4-B85C-FE3373E80313}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8B9B8290-49D1-42E4-B85C-FE3373E80313}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8B9B8290-49D1-42E4-B85C-FE3373E80313}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8B9B8290-49D1-42E4-B85C-FE3373E80313}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {2FFE97C8-72FF-4CF6-A81C-E74C03223DDA}
+	EndGlobalSection
+EndGlobal
