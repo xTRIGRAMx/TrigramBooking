@@ -1,4 +1,7 @@
-
+using System;
+using TrigramBooking.API.Data;
+using TrigramBooking.API.Middleware;
+using Microsoft.EntityFrameworkCore;
 namespace TrigramBooking.API
 {
     public class Program
@@ -8,13 +11,14 @@ namespace TrigramBooking.API
             var builder = WebApplication.CreateBuilder(args);
 
             // Add services to the container.
-
             builder.Services.AddControllers();
+            builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+            builder.Services.AddProblemDetails();
+
+
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen();
-
-            var app = builder.Build();
+            builder.Services.AddSwaggerGen();            var app = builder.Build();
 
             // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
@@ -22,6 +26,8 @@ namespace TrigramBooking.API
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
+            //exception handler
+            app.UseExceptionHandler();
 
             app.UseHttpsRedirection();
 
