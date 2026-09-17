@@ -12,7 +12,7 @@ using TrigramBooking.API.Models;
 namespace TrigramBooking.API.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/bookings")]
     public class BookingController : ControllerBase
     {
 
@@ -22,9 +22,8 @@ namespace TrigramBooking.API.Controllers
             _context = context;
         }
 
-
         // POST: BookingController/Delete/5
-        [HttpPost("bookings")]
+        [HttpPost]
         public async Task<IActionResult> CreateBooking(CreateBookingRequest bookingRequest)
         {
             bool hasConflict = await HasConflictAsync(bookingRequest.StartTimeUtc, bookingRequest.EndTimeUtc, bookingRequest.ResourceId);
@@ -54,7 +53,15 @@ namespace TrigramBooking.API.Controllers
             return Ok(booking);
         }
 
-        public async Task<bool> HasConflictAsync(DateTime startTime, DateTime endTime, int resourceId)
+        [HttpGet]
+        public async Task<ActionResult<BookingDto>> GetBooking()
+        {
+            //var student = await _context.Students
+            // .Include(s => s.Courses)
+            // .ThenInclude(c => c.Classes)
+            // .FirstOrDefaultAsync(s => s.Id == studentId);
+        }
+        private async Task<bool> HasConflictAsync(DateTime startTime, DateTime endTime, int resourceId)
         {
             return await _context.Bookings
                 .AnyAsync(b => b.ResourceId == resourceId
