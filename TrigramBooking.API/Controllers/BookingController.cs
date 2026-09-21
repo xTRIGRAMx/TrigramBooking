@@ -46,21 +46,149 @@ namespace TrigramBooking.API.Controllers
                 EndTimeUtc = bookingRequest.EndTimeUtc,
                 Status = BookingStatus.Confirmed
             };
-            
             _context.Bookings.Add(booking);
             await _context.SaveChangesAsync();
 
-            return Ok(booking);
+            // Map straight to DTO using data in memory
+            var bookingDto = new BookingDto
+            {
+                Id = booking.Id,
+                UserId = booking.UserId,
+                ResourceId = booking.ResourceId,
+                StartTimeUtc = booking.StartTimeUtc,
+                EndTimeUtc = booking.EndTimeUtc,
+                // ResourceName and UserName left null/omitted to save an extra DB lookup
+            };
+
+            //return 201
+            return CreatedAtAction(nameof(GetBookingById), new { id = booking.Id }, bookingDto);
         }
 
-        [HttpGet]
-        public async Task<ActionResult<BookingDto>> GetBooking()
+        //clearer routing
+        [HttpPatch("{id}/cancel")]
+        public async Task<IActionResult> CancelBooking(int id)
         {
-            //var student = await _context.Students
-            // .Include(s => s.Courses)
-            // .ThenInclude(c => c.Classes)
-            // .FirstOrDefaultAsync(s => s.Id == studentId);
+            var booking = await _context.Bookings.FindAsync(id);
+
+            //checks if the booking exists first
+            if(booking == null)
+            {
+                return NotFound("The booking you are looking for does not exist or what not found");
+            }
+
+            //checks if the booking is already canceled
+            if(booking.Status == BookingStatus.Cancelled)
+            {
+                return BadRequest("The booking you selected has already been cancled");
+            }
+
+            ////checks if it's past booking
+            //if(booking.EndTimeUtc < DateTime.UtcNow)
+            //{
+            //    return BadRequest("The booking you tried to cancel has already ended");
+            //}
+
+            booking.Status = BookingStatus.Cancelled;
+
+            await _context.SaveChangesAsync();
+
+            var bookingDto = new BookingDto
+            {
+                Id = booking.Id,
+                StartTimeUtc = booking.StartTimeUtc,
+                EndTimeUtc = booking.EndTimeUtc,
+                Status = booking.Status,
+            };
+            return Ok(bookingDto);
         }
+
+
+        // Single booking by ID
+        //projection vs eager loading to be studied further
+
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetBookingById(int id)
+        {
+            var bookingDto = await _context.Bookings
+                .AsNoTracking()
+                .Where(b => b.Id == id)
+                .Select(b => new BookingDto
+                {
+                    Id = b.Id,
+                    ResourceId = b.ResourceId,
+                    StartTimeUtc = b.StartTimeUtc,
+                    EndTimeUtc = b.EndTimeUtc,
+                    UserName = b.User.UserName,
+                    ResourceName = b.Resource.Name
+                })
+                .FirstOrDefaultAsync();
+
+            if (bookingDto == null)
+                return NotFound(new { Message = $"Booking with ID {id} not found." });
+
+            return Ok(bookingDto);
+        }
+
+        //projection vs eager loading to be studied further
+        [HttpGet]
+        public async Task<IActionResult> GetBookings(
+            int? userId,
+            int? resourceId,
+            DateTime? startDateUtc,
+            DateTime? endDateUtc)
+        {
+            var query = _context.Bookings.AsNoTracking();
+
+            if (userId.HasValue)
+                query = query.Where(b => b.UserId == userId.Value);
+
+            if (resourceId.HasValue)
+                query = query.Where(b => b.ResourceId == resourceId.Value);
+
+            // Correct overlap condition
+            if (startDateUtc.HasValue)
+                query = query.Where(b => b.EndTimeUtc > startDateUtc.Value);
+
+            if (endDateUtc.HasValue)
+                query = query.Where(b => b.StartTimeUtc < endDateUtc.Value);
+
+            var bookings = await query
+                .Select(b => new BookingDto
+                {
+                    Id = b.Id,
+                    ResourceId = b.ResourceId,
+                    ResourceName = b.Resource.Name,   // assuming Resource has Name
+                    UserId = b.UserId,
+                    UserName = b.User.UserName,           // assuming User has Name
+                    StartTimeUtc = b.StartTimeUtc,
+                    EndTimeUtc = b.EndTimeUtc,
+                })
+                .ToListAsync();
+
+            return Ok(bookings);
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteBooking(int id)
+        {
+            //Fetch the entity without hasNoTracking so EF tracks it
+            var booking = await _context.Bookings.FindAsync(id);
+            if (booking == null)
+            {
+                return NotFound(new { Message = $"Booking with ID {id} was not found." });
+            }
+
+            //Mark the entity for removal in the change tracker
+            _context.Bookings.Remove(booking);
+
+            //execute SQL Delete
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+
+        //to reschedule a booking, just check with hasConflict
+
+
         private async Task<bool> HasConflictAsync(DateTime startTime, DateTime endTime, int resourceId)
         {
             return await _context.Bookings
