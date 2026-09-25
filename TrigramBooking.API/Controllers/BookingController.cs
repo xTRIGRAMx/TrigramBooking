@@ -132,10 +132,10 @@ namespace TrigramBooking.API.Controllers
         //projection vs eager loading to be studied further
         [HttpGet]
         public async Task<IActionResult> GetBookings(
-            int? userId,
-            int? resourceId,
-            DateTime? startDateUtc,
-            DateTime? endDateUtc)
+            [FromQuery] int? userId,
+            [FromQuery] int? resourceId,
+            [FromQuery] DateTime? startDateUtc,
+            [FromQuery] DateTime? endDateUtc)
         {
             var query = _context.Bookings.AsNoTracking();
 
