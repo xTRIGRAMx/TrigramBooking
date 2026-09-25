@@ -71,13 +71,13 @@ namespace TrigramBooking.API.Controllers
             var booking = await _context.Bookings.FindAsync(id);
 
             //checks if the booking exists first
-            if(booking == null)
+            if (booking == null)
             {
                 return NotFound("The booking you are looking for does not exist or what not found");
             }
 
             //checks if the booking is already canceled
-            if(booking.Status == BookingStatus.Cancelled)
+            if (booking.Status == BookingStatus.Cancelled)
             {
                 return BadRequest("The booking you selected has already been cancled");
             }
@@ -186,14 +186,75 @@ namespace TrigramBooking.API.Controllers
             return NoContent();
         }
 
-        //to reschedule a booking, just check with hasConflict
+        [HttpPut("{id}")]
+        public async Task<IActionResult> RescheduleBooking(int id,RescheduleBookingRequest rescheduleRequest)
+        {
+            if (rescheduleRequest.StartTimeUtc >= rescheduleRequest.EndTimeUtc) 
+            {
+                return BadRequest(new { Message = "End time must be after the start time"});
+            }
+
+            if(rescheduleRequest.StartTimeUtc < DateTime.UtcNow)
+            {
+                return BadRequest(new { Message = "You can't change the past, you can only cancel it" });
+            }
+
+            //fetch tracked entity
+            var booking = await _context.Bookings.FindAsync(id);
+
+            //if booking doesn't exist
+            if(booking == null)
+            {
+                return NotFound(new { Message = $"The booking with {id} was not found" });
+            }
+
+            if(booking.Status == BookingStatus.Cancelled)
+            {
+                return BadRequest(new { Message = " Can't reschedule a booking that has been cancelled " });
+            }
+
+            if(booking.EndTimeUtc < DateTime.UtcNow)
+            {
+                return BadRequest(new { Message = "You can't go back to the past, you can only cancel it" });
+            }
+
+            //use the resource ID from booking
+            bool hasConflict = await HasConflictAsync(
+                rescheduleRequest.StartTimeUtc,
+                rescheduleRequest.EndTimeUtc,
+                booking.ResourceId,
+                ignorableId:id);
+
+            if(hasConflict)
+            {
+                return Conflict(new { Message = "The selected resource is not available for the requested new time slot." });
+            }
+
+            //update changes
+            booking.StartTimeUtc = rescheduleRequest.StartTimeUtc;
+            booking.EndTimeUtc = rescheduleRequest.EndTimeUtc;
+
+            await _context.SaveChangesAsync();
 
 
-        private async Task<bool> HasConflictAsync(DateTime startTime, DateTime endTime, int resourceId)
+            return Ok(new BookingDto
+            {
+                Id = booking.Id,
+                StartTimeUtc = booking.StartTimeUtc,
+                EndTimeUtc = booking.EndTimeUtc,
+                Status = booking.Status,
+                UserId = booking.UserId,
+                ResourceId = booking.ResourceId
+            });
+        }
+
+        
+        private async Task<bool> HasConflictAsync(DateTime startTime, DateTime endTime, int resourceId, int? ignorableId = null)
         {
             return await _context.Bookings
                 .AnyAsync(b => b.ResourceId == resourceId
                 && b.Status == BookingStatus.Confirmed
+                && (!ignorableId.HasValue || ignorableId.Value != b.Id)
                 && startTime < b.EndTimeUtc
                 && b.StartTimeUtc < endTime);
         }
