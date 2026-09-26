@@ -1,12 +1,9 @@
-﻿using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Threading.Tasks.Sources;
 using TrigramBooking.API.Data;
 using TrigramBooking.API.DTOs;
+using TrigramBooking.API.Extentions;
 using TrigramBooking.API.Models;
 
 namespace TrigramBooking.API.Controllers
@@ -24,8 +21,12 @@ namespace TrigramBooking.API.Controllers
 
         // POST: BookingController/Delete/5
         [HttpPost]
+        [Authorize]
         public async Task<IActionResult> CreateBooking(CreateBookingRequest bookingRequest)
         {
+            var userId = User.GetUserId();
+            if (userId == null) return Unauthorized();
+
             bool hasConflict = await HasConflictAsync(bookingRequest.StartTimeUtc, bookingRequest.EndTimeUtc, bookingRequest.ResourceId);
 
             if (hasConflict)
@@ -40,7 +41,7 @@ namespace TrigramBooking.API.Controllers
             // Instantiate and save the new Booking object 
             var booking = new Booking
             {
-                UserId = 1,//todo change to actual user id
+                UserId = userId.Value,//no more hardcoded 1
                 ResourceId = bookingRequest.ResourceId,
                 StartTimeUtc = bookingRequest.StartTimeUtc,
                 EndTimeUtc = bookingRequest.EndTimeUtc,

@@ -37,7 +37,7 @@ namespace TrigramBooking.API.Data
 
             modelBuilder.Entity<User>(entity =>
             {
-                entity.HasIndex(u=> u.Id).IsUnique();//can be remove, but kept for transparency
+                entity.HasIndex(u=> u.Id).IsUnique();//can be removed, but kept for transparency
                 entity.HasIndex(u => u.UserName).IsUnique();
                 entity.HasIndex(u => u.Email).IsUnique();
 
