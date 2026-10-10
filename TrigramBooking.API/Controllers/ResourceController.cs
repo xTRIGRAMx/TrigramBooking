@@ -158,7 +158,7 @@ namespace TrigramBooking.API.Controllers
         public async Task<IActionResult> DeleteResource(int id)
         {
             //find resource
-            var resource = await _context.Resources.FindAsync(id);
+            var resource = await _context.Resources.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id);
 
             //check if exists
             if (resource == null)
