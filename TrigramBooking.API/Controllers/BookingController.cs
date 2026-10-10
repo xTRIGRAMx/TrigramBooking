@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.EntityFrameworkCore;
 using TrigramBooking.API.Data;
 using TrigramBooking.API.DTOs;
@@ -25,7 +26,8 @@ namespace TrigramBooking.API.Controllers
         public async Task<IActionResult> CreateBooking(CreateBookingRequest bookingRequest)
         {
             var userId = User.GetUserId();
-            if (userId == null) return Unauthorized();
+            if (userId == null)
+                return Unauthorized(new { Message = "Please login before commiting this action" });
 
             bool hasConflict = await HasConflictAsync(bookingRequest.StartTimeUtc, bookingRequest.EndTimeUtc, bookingRequest.ResourceId);
 
@@ -65,8 +67,8 @@ namespace TrigramBooking.API.Controllers
             return CreatedAtAction(nameof(GetBookingById), new { id = booking.Id }, bookingDto);
         }
 
-        //clearer routing
         [HttpPatch("{id}/cancel")]
+        [Authorize]
         public async Task<IActionResult> CancelBooking(int id)
         {
             var booking = await _context.Bookings.FindAsync(id);
@@ -170,10 +172,11 @@ namespace TrigramBooking.API.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Authorize]
         public async Task<IActionResult> DeleteBooking(int id)
         {
             //Fetch the entity without hasNoTracking so EF tracks it
-            var booking = await _context.Bookings.FindAsync(id);
+            var booking = await _context.Bookings.FirstOrDefaultAsync(b => b.Id == id);
             if (booking == null)
             {
                 return NotFound(new { Message = $"Booking with ID {id} was not found." });
@@ -188,14 +191,15 @@ namespace TrigramBooking.API.Controllers
         }
 
         [HttpPut("{id}")]
-        public async Task<IActionResult> RescheduleBooking(int id,RescheduleBookingRequest rescheduleRequest)
+        [Authorize]
+        public async Task<IActionResult> RescheduleBooking(int id, RescheduleBookingRequest rescheduleRequest)
         {
-            if (rescheduleRequest.StartTimeUtc >= rescheduleRequest.EndTimeUtc) 
+            if (rescheduleRequest.StartTimeUtc >= rescheduleRequest.EndTimeUtc)
             {
-                return BadRequest(new { Message = "End time must be after the start time"});
+                return BadRequest(new { Message = "End time must be after the start time" });
             }
 
-            if(rescheduleRequest.StartTimeUtc < DateTime.UtcNow)
+            if (rescheduleRequest.StartTimeUtc < DateTime.UtcNow)
             {
                 return BadRequest(new { Message = "You can't change the past, you can only cancel it" });
             }
@@ -204,17 +208,17 @@ namespace TrigramBooking.API.Controllers
             var booking = await _context.Bookings.FindAsync(id);
 
             //if booking doesn't exist
-            if(booking == null)
+            if (booking == null)
             {
                 return NotFound(new { Message = $"The booking with {id} was not found" });
             }
 
-            if(booking.Status == BookingStatus.Cancelled)
+            if (booking.Status == BookingStatus.Cancelled)
             {
                 return BadRequest(new { Message = " Can't reschedule a booking that has been cancelled " });
             }
 
-            if(booking.EndTimeUtc < DateTime.UtcNow)
+            if (booking.EndTimeUtc < DateTime.UtcNow)
             {
                 return BadRequest(new { Message = "You can't go back to the past, you can only cancel it" });
             }
@@ -224,9 +228,9 @@ namespace TrigramBooking.API.Controllers
                 rescheduleRequest.StartTimeUtc,
                 rescheduleRequest.EndTimeUtc,
                 booking.ResourceId,
-                ignorableId:id);
+                ignorableId: id);
 
-            if(hasConflict)
+            if (hasConflict)
             {
                 return Conflict(new { Message = "The selected resource is not available for the requested new time slot." });
             }
@@ -249,7 +253,8 @@ namespace TrigramBooking.API.Controllers
             });
         }
 
-        
+
+
         private async Task<bool> HasConflictAsync(DateTime startTime, DateTime endTime, int resourceId, int? ignorableId = null)
         {
             return await _context.Bookings

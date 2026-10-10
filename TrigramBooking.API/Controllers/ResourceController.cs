@@ -158,7 +158,7 @@ namespace TrigramBooking.API.Controllers
         public async Task<IActionResult> DeleteResource(int id)
         {
             //find resource
-            var resource = await _context.Resources.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id);
+            var resource = await _context.Resources.FindAsync(id);
 
             //check if exists
             if (resource == null)
@@ -206,6 +206,83 @@ namespace TrigramBooking.API.Controllers
             await _context.SaveChangesAsync();
 
             return Ok(new { Message = $"Resource {id} has been deactivated successfully." });
-        }                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
+        }
+
+        [HttpGet("{id}/availability")]
+        public async Task<IActionResult> GetResourceAvailability(
+            int id,
+            [FromQuery] DateOnly? date = null,
+            [FromQuery] int durationMinutes = 60)
+        {
+            if (durationMinutes <= 0 || durationMinutes > 1440)
+            {
+                return BadRequest(new { Message = "Duration must be between 1 and 1440 minutes." });
+            }
+
+            var resourceExists = await _context.Resources
+                .AsNoTracking()
+                .AnyAsync(r => r.Id == id && r.IsActive);
+
+            if (!resourceExists)
+            {
+                return NotFound(new { Message = $"Active resource with ID {id} was not found." });
+            }
+
+            DateOnly targetDate = date ?? DateOnly.FromDateTime(DateTime.UtcNow);
+            DateTime dayStartUtc = targetDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            DateTime dayEndUtc = targetDate.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            DateTime nowUtc = DateTime.UtcNow;
+
+            var bookings = await _context.Bookings
+                .AsNoTracking()
+                .Where(b => b.ResourceId == id
+                         && b.Status != BookingStatus.Cancelled
+                         && b.StartTimeUtc < dayEndUtc
+                         && b.EndTimeUtc > dayStartUtc)
+                .OrderBy(b => b.StartTimeUtc)
+                .Select(b => new { b.StartTimeUtc, b.EndTimeUtc })
+                .ToListAsync();
+
+            var validStartWindows = new List<AvailableWindowDto>();
+            DateTime currentPointer = dayStartUtc > nowUtc ? dayStartUtc : nowUtc;
+
+            foreach (var booking in bookings)
+            {
+                if (booking.EndTimeUtc <= currentPointer) continue;
+
+                if (booking.StartTimeUtc > currentPointer)
+                {
+                    // Calculate max allowed start time for this gap
+                    DateTime maxStartTime = booking.StartTimeUtc.AddMinutes(-durationMinutes);
+
+                    if (maxStartTime >= currentPointer)
+                    {
+                        validStartWindows.Add(new AvailableWindowDto
+                        {
+                            WindowStartUtc = currentPointer,
+                            LatestStartTime = maxStartTime
+                        });
+                    }
+                }
+
+                if (booking.EndTimeUtc > currentPointer)
+                {
+                    currentPointer = booking.EndTimeUtc;
+                }
+            }
+
+            // Evaluate tail end of the day
+            DateTime maxTailStartTime = dayEndUtc.AddMinutes(-durationMinutes);
+            if (maxTailStartTime >= currentPointer)
+            {
+                validStartWindows.Add(new AvailableWindowDto
+                {
+                    WindowStartUtc = currentPointer,
+                    LatestStartTime = maxTailStartTime
+                });
+            }
+
+            return Ok(validStartWindows);
+        }
     }
 }
