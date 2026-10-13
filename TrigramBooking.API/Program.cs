@@ -2,6 +2,9 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Serilog;
+using Serilog.Enrichers.Sensitive;
+using Serilog.Configuration;
 using System;
 using System.Text;
 using TrigramBooking.API.Data;
@@ -33,7 +36,13 @@ namespace TrigramBooking.API
                         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Key))
                     };
                 });
+            Log.Logger = new LoggerConfiguration()
+                .ReadFrom.Configuration(builder.Configuration)
+                .CreateLogger();
+            builder.Host.UseSerilog();
 
+            builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+            builder.Services.AddProblemDetails();
             builder.Services.AddAuthorization();
             builder.Services.AddControllers();
             builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -67,6 +76,16 @@ namespace TrigramBooking.API
             });
             var app = builder.Build();
 
+            app.UseSerilogRequestLogging(options =>
+            {
+                options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+                {
+                    // Attached once per request context automatically to ALL controller logs!
+                    var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                    diagnosticContext.Set("RemoteIp", ip);
+                    diagnosticContext.Set("TraceId", httpContext.TraceIdentifier);
+                };
+            });
 
             using (var scope = app.Services.CreateScope())
             {
@@ -80,9 +99,10 @@ namespace TrigramBooking.API
             {
                 app.UseSwagger();
                 app.UseSwaggerUI();
-            }
+            } 
             //exception handler
             app.UseExceptionHandler();
+            app.UseSerilogRequestLogging();
 
             app.UseHttpsRedirection();
 
@@ -92,7 +112,19 @@ namespace TrigramBooking.API
             //Console.WriteLine($"JWT Issuer loaded: {app.Configuration["Jwt:Issuer"]}");
             app.MapControllers();
 
-            app.Run();
+            try
+            {
+                Log.Information("Starting TrigramBooking API host...");
+                app.Run();
+            }
+            catch (Exception ex)
+            {
+                Log.Fatal(ex, "The application host terminated unexpectedly during startup!");
+            }
+            finally
+            {
+                Log.CloseAndFlush(); // Safely clears memory buffers and writes remaining logs to disk
+            }
         }
     }
 }
