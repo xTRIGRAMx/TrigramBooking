@@ -17,7 +17,7 @@ namespace TrigramBooking.API
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
-
+            //  Ienumerable vs Iquriable
             // Add services to the container.
             builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
             var jwtSettings = builder.Configuration.GetSection("Jwt").Get<JwtSettings>()!;
