@@ -32,20 +32,30 @@ namespace TrigramBooking.API.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register(RegisterRequest request)
         {
-            var existingEmail = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == request.Email);
+            var existingEmail = await _context.Users
+                .AsNoTracking()
+                .Where(u => u.Email == request.Email)
+                .Select(u => (int?)u.Id)
+                .FirstOrDefaultAsync();
+            
             if (existingEmail != null)
             {
-                _logger.LogWarning(
-                    "Registration rejected: email is already taken ");
+                _logger.LogInformation(
+                    "Registration rejected: email is already taken by: {UserId}", existingEmail);
                 return Conflict(new { Message = "That email is already registered." });
             }
 
-            var existingUsername = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == request.Username);
+            var existingUsername = await _context.Users
+                .AsNoTracking()
+                .Where(u => u.UserName == request.Username)
+                .Select(u => (int?)u.Id)
+                .FirstOrDefaultAsync();
+
             if (existingUsername != null)
             {
-                _logger.LogWarning(
+                _logger.LogInformation(
                     "Registration rejected: username is already taken by: User {UserId}",
-                    existingUsername.Id);
+                    existingUsername);
                 return Conflict(new { Message = "That username is already taken." });
             }
 
@@ -69,10 +79,7 @@ namespace TrigramBooking.API.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login(LoginRequest request)
         {
-            _logger.LogDebug(
-                "Login attempt commencing...");
-
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+            var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == request.Email);
 
             if (user == null)
             {
