@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.EntityFrameworkCore;
+using System.Linq;
 using TrigramBooking.API.Data;
 using TrigramBooking.API.DTOs;
 using TrigramBooking.API.Extentions;
@@ -29,37 +30,75 @@ namespace TrigramBooking.API.Controllers
         public async Task<IActionResult> CreateBooking(CreateBookingRequest bookingRequest)
         {
             var userId = User.GetUserId();
-            if (userId == null)
+
+            #region Date Validation
+
+            if (bookingRequest.StartTimeUtc >= bookingRequest.EndTimeUtc)
             {
-                _logger.LogWarning(
-                    "Booking creation rejected: authenticated request has no resolvable user ID (RemoteIp={RemoteIp})",
-                    HttpContext.Connection.RemoteIpAddress);
-                return Unauthorized(new { Message = "Please login before commiting this action" });
+                _logger.LogInformation("Invalid booking time range");
+
+                return BadRequest(new { Message = "End time must be after the start time" });
             }
 
-            _logger.LogDebug(
-                "User {UserId} creating booking: ResourceId={ResourceId}, StartTimeUtc={StartTimeUtc:o}, EndTimeUtc={EndTimeUtc:o}",
-                userId, bookingRequest.ResourceId, bookingRequest.StartTimeUtc, bookingRequest.EndTimeUtc);
+            if (bookingRequest.StartTimeUtc < DateTime.UtcNow)
+            {
+                _logger.LogInformation("Booking start time is in the past");
 
-            bool hasConflict = await HasConflictAsync(bookingRequest.StartTimeUtc, bookingRequest.EndTimeUtc, bookingRequest.ResourceId);
+                return BadRequest(new { Message = "Booking start time cannot be in the past" });
+            }
+
+            #endregion
+
+            #region Resource Validation
+
+            var resource = await _context.Resources
+                .AsNoTracking()
+                .Where(r => r.Id == bookingRequest.ResourceId)
+                .Select(r => new { r.IsActive })
+                .FirstOrDefaultAsync();
+
+            if (resource == null)
+            {
+                _logger.LogInformation("Resource {ResourceId} doesn't exist", bookingRequest.ResourceId);
+
+                return NotFound(new { Message = "Resource doesn't exist" });
+            }
+
+            if (!resource.IsActive)
+            {
+                _logger.LogInformation("Resource is currently unavailable");
+
+                return Conflict(new { Message = "Resource is currently unavailable" });
+            }
+
+            #endregion
+
+            #region Booking Conflict Validation
+
+            bool hasConflict = await HasConflictAsync(
+                bookingRequest.StartTimeUtc,
+                bookingRequest.EndTimeUtc,
+                bookingRequest.ResourceId);
 
             if (hasConflict)
             {
-                _logger.LogWarning(
-                    "Booking creation rejected for user {UserId}: conflict on resource {ResourceId} between {StartTimeUtc:o} and {EndTimeUtc:o}",
-                    userId, bookingRequest.ResourceId, bookingRequest.StartTimeUtc, bookingRequest.EndTimeUtc);
+                _logger.LogInformation(
+                    "Booking creation rejected for user {UserId}: conflict on resource {ResourceId}",
+                    userId, bookingRequest.ResourceId);
 
-                // 409 Conflict is the standard status code for resource overlap/double-booking!
                 return Conflict(new
                 {
-                    Message = "You're resource is either unavailable " +
-                    "or has a schedule conflict with this timeslot",
+                    Message = "Resource already has a booking during this timeslot"
                 });
             }
-            // Instantiate and save the new Booking object 
+
+            #endregion
+
+            #region Booking Creation
+
             var booking = new Booking
             {
-                UserId = userId.Value,//no more hardcoded 1
+                UserId = userId.Value,
                 ResourceId = bookingRequest.ResourceId,
                 StartTimeUtc = bookingRequest.StartTimeUtc,
                 EndTimeUtc = bookingRequest.EndTimeUtc,
@@ -70,56 +109,69 @@ namespace TrigramBooking.API.Controllers
             await _context.SaveChangesAsync();
 
             _logger.LogInformation(
-                "Booking {BookingId} created by user {UserId}: ResourceId={ResourceId}, StartTimeUtc={StartTimeUtc:o}, EndTimeUtc={EndTimeUtc:o}",
-                booking.Id, booking.UserId, booking.ResourceId, booking.StartTimeUtc, booking.EndTimeUtc);
+                "Booking {BookingId} created by user {UserId}",
+                booking.Id, booking.UserId);
 
-            // Map straight to DTO using data in memory
+            #endregion
+
+            #region Response Mapping
+
             var bookingDto = new BookingDto
             {
                 Id = booking.Id,
                 UserId = booking.UserId,
                 ResourceId = booking.ResourceId,
                 StartTimeUtc = booking.StartTimeUtc,
-                EndTimeUtc = booking.EndTimeUtc,
-                // ResourceName and UserName left null/omitted to save an extra DB lookup
+                EndTimeUtc = booking.EndTimeUtc
             };
 
-            //return 201
-            return CreatedAtAction(nameof(GetBookingById), new { id = booking.Id }, bookingDto);
+            return CreatedAtAction(
+                nameof(GetBookingById),
+                new { id = booking.Id },
+                bookingDto);
+
+            #endregion
         }
 
         [HttpPatch("{id}/cancel")]
         [Authorize]
         public async Task<IActionResult> CancelBooking(int id)
         {
-            var actingUserId = User.GetUserId();
-            _logger.LogDebug("User {ActingUserId} cancelling booking {BookingId}", actingUserId, id);
+            #region Authentication & Booking Retrieval
 
+            var actingUserId = User.GetUserId();
             var booking = await _context.Bookings.FindAsync(id);
 
-            //checks if the booking exists first
+            #endregion
+
+            #region Booking Existence Validation
+
             if (booking == null)
             {
-                _logger.LogWarning(
+                _logger.LogInformation(
                     "Booking cancellation failed: booking {BookingId} not found (ActingUserId={ActingUserId})",
                     id, actingUserId);
-                return NotFound("The booking you are looking for does not exist or what not found");
+
+                return NotFound(new { Message = "The requested booking was not found." });
             }
 
-            //checks if the booking is already canceled
+            #endregion
+
+            #region Cancellation Validation
+
+            // Check if the booking is already cancelled
             if (booking.Status == BookingStatus.Cancelled)
             {
-                _logger.LogWarning(
+                _logger.LogInformation(
                     "Booking cancellation rejected: booking {BookingId} is already cancelled (ActingUserId={ActingUserId})",
                     id, actingUserId);
-                return BadRequest("The booking you selected has already been cancled");
+
+                return Conflict( new { Message = "The booking you selected has already been cancelled." });
             }
 
-            ////checks if it's past booking
-            //if(booking.EndTimeUtc < DateTime.UtcNow)
-            //{
-            //    return BadRequest("The booking you tried to cancel has already ended");
-            //}
+            #endregion
+
+            #region Booking Cancellation
 
             booking.Status = BookingStatus.Cancelled;
 
@@ -129,6 +181,10 @@ namespace TrigramBooking.API.Controllers
                 "Booking {BookingId} cancelled by user {ActingUserId} (OwnerUserId={OwnerUserId}, ResourceId={ResourceId})",
                 booking.Id, actingUserId, booking.UserId, booking.ResourceId);
 
+            #endregion
+
+            #region Response Mapping
+
             var bookingDto = new BookingDto
             {
                 Id = booking.Id,
@@ -136,17 +192,20 @@ namespace TrigramBooking.API.Controllers
                 EndTimeUtc = booking.EndTimeUtc,
                 Status = booking.Status,
             };
-            return Ok(bookingDto);
-        }
 
+            return Ok(bookingDto);
+
+            #endregion
+        }
 
         // Single booking by ID
         //projection vs eager loading to be studied further
 
+        [Authorize]
         [HttpGet("{id}")]
         public async Task<IActionResult> GetBookingById(int id)
         {
-            _logger.LogDebug("Fetching booking {BookingId}", id);
+            #region Booking Retrieval
 
             var bookingDto = await _context.Bookings
                 .AsNoTracking()
@@ -158,21 +217,34 @@ namespace TrigramBooking.API.Controllers
                     StartTimeUtc = b.StartTimeUtc,
                     EndTimeUtc = b.EndTimeUtc,
                     UserName = b.User.UserName,
-                    ResourceName = b.Resource.Name
+                    ResourceName = b.Resource.Name,
+                    Status = b.Status
                 })
                 .FirstOrDefaultAsync();
 
+            #endregion
+
+            #region Booking Existence Validation
+
             if (bookingDto == null)
             {
-                _logger.LogWarning("Booking {BookingId} not found", id);
+                _logger.LogInformation("Booking {BookingId} not found", id);
                 return NotFound(new { Message = $"Booking with ID {id} not found." });
             }
 
-            _logger.LogDebug("Booking {BookingId} retrieved successfully", id);
+            #endregion
+
+            #region Response
+
+            _logger.LogInformation("Booking {BookingId} retrieved successfully", id);
             return Ok(bookingDto);
+
+            #endregion
         }
 
         //projection vs eager loading to be studied further
+        //TODO Add pagnation to the website
+        [Authorize]
         [HttpGet]
         public async Task<IActionResult> GetBookings(
             [FromQuery] int? userId,
@@ -180,11 +252,13 @@ namespace TrigramBooking.API.Controllers
             [FromQuery] DateTime? startDateUtc,
             [FromQuery] DateTime? endDateUtc)
         {
-            _logger.LogDebug(
-                "Fetching bookings with filters: UserId={UserId}, ResourceId={ResourceId}, StartDateUtc={StartDateUtc:o}, EndDateUtc={EndDateUtc:o}",
-                userId, resourceId, startDateUtc, endDateUtc);
+            #region Query Initialization
 
             var query = _context.Bookings.AsNoTracking();
+
+            #endregion
+
+            #region Optional Filters
 
             if (userId.HasValue)
                 query = query.Where(b => b.UserId == userId.Value);
@@ -192,113 +266,210 @@ namespace TrigramBooking.API.Controllers
             if (resourceId.HasValue)
                 query = query.Where(b => b.ResourceId == resourceId.Value);
 
-            // Correct overlap condition
+            #endregion
+
+            #region Date Range Validation
+            if (startDateUtc.HasValue && endDateUtc.HasValue)
+            {
+                if (startDateUtc.Value >= endDateUtc.Value)
+                {
+                    return BadRequest(new
+                    {
+                        Message = "Start date must be earlier than end date."
+                    });
+                }
+            }
+
+            #endregion
+
+            #region Date Range Filtering
+
+            // Retrieve bookings that overlap with the requested date range.
             if (startDateUtc.HasValue)
                 query = query.Where(b => b.EndTimeUtc > startDateUtc.Value);
 
             if (endDateUtc.HasValue)
                 query = query.Where(b => b.StartTimeUtc < endDateUtc.Value);
 
+            #endregion
+
+            #region Booking Retrieval & Projection
+
             var bookings = await query
+                .OrderBy(b => b.StartTimeUtc)
                 .Select(b => new BookingDto
                 {
                     Id = b.Id,
                     ResourceId = b.ResourceId,
-                    ResourceName = b.Resource.Name,   // assuming Resource has Name
+                    ResourceName = b.Resource.Name,
                     UserId = b.UserId,
-                    UserName = b.User.UserName,           // assuming User has Name
+                    UserName = b.User.UserName,
                     StartTimeUtc = b.StartTimeUtc,
                     EndTimeUtc = b.EndTimeUtc,
+                    Status = b.Status
                 })
                 .ToListAsync();
 
+            #endregion
+
+            #region Response
+
             _logger.LogInformation("Retrieved {BookingCount} bookings", bookings.Count);
             return Ok(bookings);
+
+            #endregion
         }
 
         [HttpDelete("{id}")]
         [Authorize]
         public async Task<IActionResult> DeleteBooking(int id)
         {
-            var actingUserId = User.GetUserId();
-            _logger.LogDebug("User {ActingUserId} deleting booking {BookingId}", actingUserId, id);
+            #region Authentication & Booking Retrieval
 
-            //Fetch the entity without hasNoTracking so EF tracks it
-            var booking = await _context.Bookings.FirstOrDefaultAsync(b => b.Id == id);
+            var actingUserId = User.GetUserId();
+
+            var booking = await _context.Bookings.FindAsync(id);
+
+            #endregion
+
+            #region Booking Existence Validation
+
             if (booking == null)
             {
-                _logger.LogWarning(
+                _logger.LogInformation(
                     "Booking deletion failed: booking {BookingId} not found (ActingUserId={ActingUserId})",
                     id, actingUserId);
+
                 return NotFound(new { Message = $"Booking with ID {id} was not found." });
             }
 
-            //Mark the entity for removal in the change tracker
+            #endregion
+
+            #region Booking Deletion
+
+            // Mark the entity for removal in the change tracker
             _context.Bookings.Remove(booking);
 
-            //execute SQL Delete
+            // Execute SQL DELETE
             await _context.SaveChangesAsync();
 
             _logger.LogInformation(
                 "Booking {BookingId} deleted by user {ActingUserId} (OwnerUserId={OwnerUserId}, ResourceId={ResourceId}, Status={Status})",
                 id, actingUserId, booking.UserId, booking.ResourceId, booking.Status);
+
+            #endregion
+
+            #region Response
+
             return NoContent();
+
+            #endregion
         }
 
         [HttpPut("{id}")]
         [Authorize]
-        public async Task<IActionResult> RescheduleBooking(int id, RescheduleBookingRequest rescheduleRequest)
+        public async Task<IActionResult> RescheduleBooking(
+            int id,
+            RescheduleBookingRequest rescheduleRequest)
         {
             var actingUserId = User.GetUserId();
-            _logger.LogDebug(
-                "User {ActingUserId} rescheduling booking {BookingId} to StartTimeUtc={StartTimeUtc:o}, EndTimeUtc={EndTimeUtc:o}",
-                actingUserId, id, rescheduleRequest.StartTimeUtc, rescheduleRequest.EndTimeUtc);
+            var now = DateTime.UtcNow;
+
+            #region Date Validation
 
             if (rescheduleRequest.StartTimeUtc >= rescheduleRequest.EndTimeUtc)
             {
-                _logger.LogWarning(
+                _logger.LogInformation(
                     "Reschedule rejected for booking {BookingId}: end time {EndTimeUtc:o} is not after start time {StartTimeUtc:o}",
                     id, rescheduleRequest.EndTimeUtc, rescheduleRequest.StartTimeUtc);
-                return BadRequest(new { Message = "End time must be after the start time" });
+
+                return BadRequest(new
+                {
+                    Message = "End time must be after the start time"
+                });
             }
 
-            if (rescheduleRequest.StartTimeUtc < DateTime.UtcNow)
+            if (rescheduleRequest.StartTimeUtc < now)
             {
-                _logger.LogWarning(
+                _logger.LogInformation(
                     "Reschedule rejected for booking {BookingId}: requested start time {StartTimeUtc:o} is in the past",
                     id, rescheduleRequest.StartTimeUtc);
-                return BadRequest(new { Message = "You can't change the past, you can only cancel it" });
+
+                return BadRequest(new
+                {
+                    Message = "You can't change the past, you can only cancel it"
+                });
             }
 
-            //fetch tracked entity
+            #endregion
+
+
+            #region Booking Retrieval
+
+            // Fetch tracked entity
             var booking = await _context.Bookings.FindAsync(id);
 
-            //if booking doesn't exist
+            #endregion
+
+            #region Booking Existence Validation
+
             if (booking == null)
             {
-                _logger.LogWarning(
+                _logger.LogInformation(
                     "Reschedule failed: booking {BookingId} not found (ActingUserId={ActingUserId})",
                     id, actingUserId);
-                return NotFound(new { Message = $"The booking with {id} was not found" });
-            }
 
+                return NotFound(new
+                {
+                    Message = $"The booking with {id} was not found"
+                });
+            }
+            #endregion
+
+            #region Resource Validation
+            var resource = await _context.Resources
+                .Where(r => r.Id == booking.ResourceId)
+                .Select(r => new { r.IsActive })
+                .FirstOrDefaultAsync();
+            if (!resource.IsActive)
+            {
+                _logger.LogInformation(
+                    "Reschedule rejected for booking {BookingId}: resource {ResourceId} is inactive",
+                    id, booking.ResourceId);
+
+                return Conflict(new { Message = "The selected resource is currently inactive and cannot be booked." });
+            }
+            #endregion
+
+            #region Booking Status Validation
             if (booking.Status == BookingStatus.Cancelled)
             {
-                _logger.LogWarning(
+                _logger.LogInformation(
                     "Reschedule rejected: booking {BookingId} is cancelled",
                     id);
-                return BadRequest(new { Message = " Can't reschedule a booking that has been cancelled " });
+
+                return Conflict(new
+                {
+                    Message = "Can't reschedule a booking that has been cancelled."
+                });
             }
 
-            if (booking.EndTimeUtc < DateTime.UtcNow)
+            if (booking.EndTimeUtc < now)
             {
-                _logger.LogWarning(
+                _logger.LogInformation(
                     "Reschedule rejected: booking {BookingId} has already ended at {EndTimeUtc:o}",
                     id, booking.EndTimeUtc);
-                return BadRequest(new { Message = "You can't go back to the past, you can only cancel it" });
+
+                return BadRequest(new
+                {
+                    Message = "You can't go back to the past, you can only cancel it"
+                });
             }
 
-            //use the resource ID from booking
+            #endregion
+
+            #region Booking Conflict Validation
+
             bool hasConflict = await HasConflictAsync(
                 rescheduleRequest.StartTimeUtc,
                 rescheduleRequest.EndTimeUtc,
@@ -307,27 +478,43 @@ namespace TrigramBooking.API.Controllers
 
             if (hasConflict)
             {
-                _logger.LogWarning(
+                _logger.LogInformation(
                     "Reschedule rejected for booking {BookingId}: conflict on resource {ResourceId} between {StartTimeUtc:o} and {EndTimeUtc:o}",
                     id, booking.ResourceId, rescheduleRequest.StartTimeUtc, rescheduleRequest.EndTimeUtc);
-                return Conflict(new { Message = "The selected resource is not available for the requested new time slot." });
+
+                return Conflict(new
+                {
+                    Message = "The selected resource is not available for the requested new time slot."
+                });
             }
 
-            // keep the previous times so the audit log shows what changed
+            #endregion
+
+            #region Booking Update
+
+            // Keep previous times for audit logging
             var previousStartTimeUtc = booking.StartTimeUtc;
             var previousEndTimeUtc = booking.EndTimeUtc;
 
-            //update changes
+            // Update booking times
             booking.StartTimeUtc = rescheduleRequest.StartTimeUtc;
             booking.EndTimeUtc = rescheduleRequest.EndTimeUtc;
 
             await _context.SaveChangesAsync();
+
+            #endregion
+
+            #region Audit Logging
 
             _logger.LogInformation(
                 "Booking {BookingId} rescheduled by user {ActingUserId} (OwnerUserId={OwnerUserId}, ResourceId={ResourceId}): " +
                 "{PreviousStartTimeUtc:o}-{PreviousEndTimeUtc:o} -> {NewStartTimeUtc:o}-{NewEndTimeUtc:o}",
                 booking.Id, actingUserId, booking.UserId, booking.ResourceId,
                 previousStartTimeUtc, previousEndTimeUtc, booking.StartTimeUtc, booking.EndTimeUtc);
+
+            #endregion
+
+            #region Response Mapping
 
             return Ok(new BookingDto
             {
@@ -338,9 +525,8 @@ namespace TrigramBooking.API.Controllers
                 UserId = booking.UserId,
                 ResourceId = booking.ResourceId
             });
+            #endregion
         }
-
-
 
         private async Task<bool> HasConflictAsync(DateTime startTime, DateTime endTime, int resourceId, int? ignorableId = null)
         {
