@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TrigramBooking.API.Data;
 using TrigramBooking.API.DTOs;
@@ -20,15 +21,12 @@ namespace TrigramBooking.API.Controllers
         }
 
         [HttpGet]
+        [Authorize]
         public async Task<IActionResult> GetResources(
             [FromQuery] int? capacity,
             [FromQuery] string? category,
             [FromQuery] bool? isActive)
         {
-            _logger.LogDebug(
-                "Fetching resources with filters: Capacity={Capacity}, Category={Category}, IsActive={IsActive}",
-                capacity, category, isActive);
-
             var query = _context.Resources.AsNoTracking();
             if (capacity.HasValue)
             {
@@ -62,10 +60,9 @@ namespace TrigramBooking.API.Controllers
         }
 
         [HttpGet("{id}")]
+        [Authorize]
         public async Task<IActionResult> GetResourceById(int id)
         {
-            _logger.LogDebug("Fetching resource {ResourceId}", id);
-
             var resourceDto = await _context.Resources
                 .AsNoTracking()
                 .Where(r => r.Id == id)
@@ -82,26 +79,23 @@ namespace TrigramBooking.API.Controllers
 
             if (resourceDto == null)
             {
-                _logger.LogWarning("Resource {ResourceId} not found", id);
+                _logger.LogInformation("Resource {ResourceId} not found", id);
                 return NotFound(new { Message = $"Resource with ID {id} not found." });
             }
 
-            _logger.LogDebug("Resource {ResourceId} retrieved successfully", id);
+            _logger.LogInformation("Resource {ResourceId} retrieved successfully", id);
             return Ok(resourceDto);
         }
 
         [HttpPost]
+        [Authorize]
         public async Task<IActionResult> CreateResource([FromBody] CreateResourceRequest resourceRequest)
         {
-            _logger.LogDebug(
-                "Creating resource: Name={ResourceName}, Category={Category}, Capacity={Capacity}, IsActive={IsActive}",
-                resourceRequest.Name, resourceRequest.Category, resourceRequest.Capacity, resourceRequest.IsActive);
-
             //check if a resource name exists(optional)
             bool exists = await _context.Resources.AnyAsync(r => r.Name == resourceRequest.Name);
             if (exists)
             {
-                _logger.LogWarning(
+                _logger.LogInformation(
                     "Resource creation rejected: name {ResourceName} is already in use",
                     resourceRequest.Name);
                 return Conflict(new { Message = $"The resource name:{resourceRequest.Name} is already in use, please change it" });
@@ -139,17 +133,14 @@ namespace TrigramBooking.API.Controllers
         }
 
         [HttpPut("{id}")]
+        [Authorize]
 
         public async Task<IActionResult> UpdateResource(int id, [FromBody] CreateResourceRequest updateResource)
         {
-            _logger.LogDebug(
-                "Updating resource {ResourceId}: Name={ResourceName}, Category={Category}, Capacity={Capacity}, IsActive={IsActive}",
-                id, updateResource.Name, updateResource.Category, updateResource.Capacity, updateResource.IsActive);
-
             var resource = await _context.Resources.FindAsync(id);
             if (resource == null)
             {
-                _logger.LogWarning("Resource update failed: resource {ResourceId} not found", id);
+                _logger.LogInformation("Resource update failed: resource {ResourceId} not found", id);
                 return NotFound(new { Message = $"The resource with id:{id} was not found" });
             }
 
@@ -157,7 +148,7 @@ namespace TrigramBooking.API.Controllers
             bool exists = await _context.Resources.AnyAsync(r => r.Name == updateResource.Name && r.Id != id);
             if (exists)
             {
-                _logger.LogWarning(
+                _logger.LogInformation(
                     "Resource update rejected: name {ResourceName} is already used by another resource (updating {ResourceId})",
                     updateResource.Name, id);
                 return Conflict(new { Message = $"A resource named '{updateResource.Name}' already exists." });
@@ -190,9 +181,10 @@ namespace TrigramBooking.API.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Authorize]
         public async Task<IActionResult> DeleteResource(int id)
         {
-            _logger.LogDebug("Deleting resource {ResourceId}", id);
+            _logger.LogInformation("Deleting resource {ResourceId}", id);
 
             //find resource
             var resource = await _context.Resources.FindAsync(id);
@@ -200,16 +192,16 @@ namespace TrigramBooking.API.Controllers
             //check if exists
             if (resource == null)
             {
-                _logger.LogWarning("Resource deletion failed: resource {ResourceId} not found", id);
+                _logger.LogInformation("Resource deletion failed: resource {ResourceId} not found", id);
                 return NotFound(new { Message = $"The resource:{id} was not found" });
             }
 
             if (resource.IsActive)
             {
-                _logger.LogWarning(
+                _logger.LogInformation(
                     "Resource deletion rejected: resource {ResourceId} is still active and must be deactivated first",
                     id);
-                return BadRequest(new { Message = "Please deactivate the resource before deleting it." });
+                return Conflict(new { Message = "Please deactivate the resource before deleting it." });
             }
 
             bool hasActiveBookings = await _context.Bookings.AnyAsync(b =>
@@ -219,7 +211,7 @@ namespace TrigramBooking.API.Controllers
 
             if (hasActiveBookings)
             {
-                _logger.LogWarning(
+                _logger.LogInformation(
                     "Resource deletion rejected: resource {ResourceId} has active or upcoming bookings",
                     id);
                 return Conflict(new { Message = "Cannot delete this resource because it has active or upcoming bookings." });
@@ -236,24 +228,23 @@ namespace TrigramBooking.API.Controllers
         }
 
         [HttpPatch("{id}/deactivate")]
+        [Authorize]
         public async Task<IActionResult> DeactivateResource(int id)
         {
-            _logger.LogDebug("Deactivating resource {ResourceId}", id);
-
             var resource = await _context.Resources.FindAsync(id);
 
             if (resource == null)
             {
-                _logger.LogWarning("Resource deactivation failed: resource {ResourceId} not found", id);
+                _logger.LogInformation("Resource deactivation failed: resource {ResourceId} not found", id);
                 return NotFound(new { Message = $"Resource with ID:{id} was not found" });
             }
 
             if (!resource.IsActive)
             {
-                _logger.LogWarning(
+                _logger.LogInformation(
                     "Resource deactivation rejected: resource {ResourceId} is already deactivated",
                     id);
-                return BadRequest(new { Message = "Resource is already deactivated." });
+                return Conflict(new { Message = "Resource is already deactivated." });
             }
 
             resource.IsActive = false;
@@ -264,18 +255,15 @@ namespace TrigramBooking.API.Controllers
         }
 
         [HttpGet("{id}/availability")]
+        [Authorize]
         public async Task<IActionResult> GetResourceAvailability(
             int id,
             [FromQuery] DateOnly? date = null,
             [FromQuery] int durationMinutes = 60)
         {
-            _logger.LogDebug(
-                "Checking availability for resource {ResourceId}: Date={Date}, DurationMinutes={DurationMinutes}",
-                id, date, durationMinutes);
-
             if (durationMinutes <= 0 || durationMinutes > 1440)
             {
-                _logger.LogWarning(
+                _logger.LogInformation(
                     "Availability check rejected for resource {ResourceId}: invalid duration {DurationMinutes} minutes",
                     id, durationMinutes);
                 return BadRequest(new { Message = "Duration must be between 1 and 1440 minutes." });
@@ -287,7 +275,7 @@ namespace TrigramBooking.API.Controllers
 
             if (!resourceExists)
             {
-                _logger.LogWarning(
+                _logger.LogInformation(
                     "Availability check failed: active resource {ResourceId} not found",
                     id);
                 return NotFound(new { Message = $"Active resource with ID {id} was not found." });
@@ -308,7 +296,7 @@ namespace TrigramBooking.API.Controllers
                 .Select(b => new { b.StartTimeUtc, b.EndTimeUtc })
                 .ToListAsync();
 
-            _logger.LogDebug(
+            _logger.LogInformation(
                 "Found {BookingCount} non-cancelled bookings for resource {ResourceId} on {TargetDate}",
                 bookings.Count, id, targetDate);
 
