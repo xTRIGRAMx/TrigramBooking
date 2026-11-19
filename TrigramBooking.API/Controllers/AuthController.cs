@@ -42,7 +42,7 @@ namespace TrigramBooking.API.Controllers
             {
                 _logger.LogInformation(
                     "Registration rejected: email is already taken by: {UserId}", existingEmail);
-                return Conflict(new { Message = "That email is already registered." });
+                return Conflict(new { Message = "Try a different username or email" });
             }
 
             var existingUsername = await _context.Users
@@ -56,7 +56,7 @@ namespace TrigramBooking.API.Controllers
                 _logger.LogInformation(
                     "Registration rejected: username is already taken by: User {UserId}",
                     existingUsername);
-                return Conflict(new { Message = "That username is already taken." });
+                return Conflict(new { Message = "Try a different username or password" });
             }
 
             var user = new User
