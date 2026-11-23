@@ -6,7 +6,7 @@ namespace TrigramBooking.API.Services
 {
     public interface IResourceService
     {
-        Task<ServiceResult<ResourceDto>?> GetResourcesAsync(
+        Task<ServiceResult<List<ResourceDto>>> GetResourcesAsync(
             int? capacity,
             string? category,
             bool? isActive);
