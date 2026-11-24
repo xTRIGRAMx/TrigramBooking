@@ -10,3 +10,9 @@ Token payload is readable by the bearer (sub, email, jti), and the signing key i
 Masked emails and IPs (POPIA): what you log, and what you deliberately don’t.
 Existing bookings on a later-deactivated resource can’t be rescheduled. It’s a deliberate rule.
 The “Extentions” typo: just fix the folder and namespace rather than documenting it.
+===============
+keep in mind
+===============
+Keep in mind some controllers can fail in multiple ways, 
+and the API spec is not always clear on which error code to return. 
+For example, a booking reschedule might fail due to a non-existent booking (404) or an invalid time (400). The API should clearly document the expected error codes for each endpoint.

@@ -8,6 +8,8 @@
 
         public ServiceError? Error { get; private set; }
 
+        private ServiceResult() { }
+
         public static ServiceResult<T> Successful(T data)
         {
             return new ServiceResult<T>

@@ -13,9 +13,9 @@ namespace TrigramBooking.API.Services
 
         Task<ServiceResult<ResourceDto>> GetResourcesByIdAsync(int? id);
 
-        Task<ServiceResult<ResourceDto>?> CreateResourceAsync(CreateResourceRequest createResourceRequest);
+        Task<ServiceResult<ResourceDto>> CreateResourceAsync(CreateResourceRequest createResourceRequest);
 
-        Task<ServiceResult<ResourceDto>?> UpdateResourceAsync(CreateResourceRequest updateResourceRequest);
+        Task<ServiceResult<ResourceDto>> UpdateResourceAsync(CreateResourceRequest updateResourceRequest);
 
         Task<bool?> DeleteResourceAsync(int? id);
     }

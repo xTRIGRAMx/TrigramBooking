@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using TrigramBooking.API.Data;
 using TrigramBooking.API.DTOs;
 using TrigramBooking.API.Models;
+using TrigramBooking.API.Services;
+using TrigramBooking.API.Services.Results;
 
 namespace TrigramBooking.API.Controllers
 {
@@ -13,123 +15,56 @@ namespace TrigramBooking.API.Controllers
     {
         private readonly TrigramDbContext _context;
         private readonly ILogger<ResourceController> _logger;
+        private readonly IResourceService _resourceService;
 
-        public ResourceController(TrigramDbContext context, ILogger<ResourceController> logger)
+        public ResourceController(TrigramDbContext context, 
+            ILogger<ResourceController> logger,
+            IResourceService resourceService)
         {
             _context = context;
             _logger = logger;
+            _resourceService = resourceService;
         }
 
         [HttpGet]
         [Authorize]
+
         public async Task<IActionResult> GetResources(
             [FromQuery] int? capacity,
             [FromQuery] string? category,
             [FromQuery] bool? isActive)
         {
-            var query = _context.Resources.AsNoTracking();
-            if (capacity.HasValue)
-            {
-                query = query.Where(c => c.Capacity >= capacity);
-            }
-
-            if (!string.IsNullOrWhiteSpace(category))
-            {
-                query = query.Where(c => c.Category == category);
-            }
-
-            if (isActive.HasValue)
-            {
-                query = query.Where(c => c.IsActive == isActive);
-            }
-
-            var resources = await query
-                .Select(r => new ResourceDto
-                {
-                    Id = r.Id,
-                    Name = r.Name,
-                    Capacity = r.Capacity,
-                    Category = r.Category,
-                    Description = r.Description,
-                    IsActive = r.IsActive
-
-                }).ToListAsync();
-
-            _logger.LogInformation("Retrieved {ResourceCount} resources", resources.Count);
-            return Ok(resources);
+            var resources = await _resourceService.GetResourcesAsync(capacity, category, isActive);
+            return Ok(resources.Data);
         }
 
         [HttpGet("{id}")]
         [Authorize]
+
         public async Task<IActionResult> GetResourceById(int id)
         {
-            var resourceDto = await _context.Resources
-                .AsNoTracking()
-                .Where(r => r.Id == id)
-                .Select(r => new ResourceDto
-                {
-                    Id = r.Id,
-                    Name = r.Name,
-                    Capacity = r.Capacity,
-                    Category = r.Category,
-                    Description = r.Description,
-                    IsActive = r.IsActive
-                })
-                .FirstOrDefaultAsync();
+            var resourceResult = await _resourceService.GetResourcesByIdAsync(id);
 
-            if (resourceDto == null)
+            if (!resourceResult.Success)
             {
-                _logger.LogInformation("Resource {ResourceId} not found", id);
-                return NotFound(new { Message = $"Resource with ID {id} not found." });
+                return NotFound(new { Message = resourceResult.Error?.Message });
             }
 
-            _logger.LogInformation("Resource {ResourceId} retrieved successfully", id);
-            return Ok(resourceDto);
+            return Ok(resourceResult.Data);
         }
 
         [HttpPost]
         [Authorize]
         public async Task<IActionResult> CreateResource([FromBody] CreateResourceRequest resourceRequest)
         {
-            //check if a resource name exists(optional)
-            bool exists = await _context.Resources.AnyAsync(r => r.Name == resourceRequest.Name);
-            if (exists)
+            var resource = await _resourceService.CreateResourceAsync(resourceRequest);
+
+            if(!resource.Success)
             {
-                _logger.LogInformation(
-                    "Resource creation rejected: name {ResourceName} is already in use",
-                    resourceRequest.Name);
-                return Conflict(new { Message = $"The resource name:{resourceRequest.Name} is already in use, please change it" });
+                return Conflict(new { Message = resource.Error!.Message });
             }
 
-            //Map requestDto to EF core entity
-            Resource resource = new Resource()
-            {
-                Name = resourceRequest.Name,
-                Capacity = resourceRequest.Capacity,
-                Category = resourceRequest.Category,
-                Description = resourceRequest.Description,
-                IsActive = resourceRequest.IsActive
-            };
-
-            //Add and Persist
-            _context.Resources.Add(resource);
-            await _context.SaveChangesAsync();
-
-            _logger.LogInformation(
-                "Resource {ResourceId} created: Name={ResourceName}, Category={Category}, Capacity={Capacity}, IsActive={IsActive}",
-                resource.Id, resource.Name, resource.Category, resource.Capacity, resource.IsActive);
-
-            ResourceDto resourceDto = new ResourceDto()
-            {
-                Id = resource.Id,
-                Name = resource.Name,
-                Capacity = resource.Capacity,
-                Category = resource.Category,
-                Description = resource.Description,
-                IsActive = resource.IsActive
-            };
-            //Return 201 Created with Location header pointing to GetResourceById
-            return CreatedAtAction(nameof(GetResourceById), new { id = resource.Id }, resourceDto);
+            return CreatedAtAction(nameof(GetResourceById), new { id = resource.Data!.Id }, resource.Data);
         }
 
         [HttpPut("{id}")]

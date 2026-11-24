@@ -2,22 +2,18 @@
 {
     public class ServiceError
     {
-        public ServiceErrorCode Code { get; set; }
+        public required ServiceErrorCode Code { get; init; }
 
-        public string Message { get; set; }
+        public required string Message { get; init; }
     }
 
     public enum ServiceErrorCode
     {
-        None,
-        EmailAlreadyExists,
-        UsernameAlreadyExists,
-        ResourceNotFound,
-        ResourceStillActive,
-        ResourceHasActiveBookings,
-        BookingNotFound,
-        BookingConflict,
-        BookingAlreadyCancelled,
-        InvalidRequest
+        NotFound,
+        AlreadyExists,
+        Conflict,
+        InvalidRequest,
+        Unauthorized,
+        Forbidden
     }
 }
