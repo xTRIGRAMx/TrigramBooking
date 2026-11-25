@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Runtime.InteropServices;
 using TrigramBooking.API.Data;
 using TrigramBooking.API.DTOs;
+using TrigramBooking.API.Extensions;
 using TrigramBooking.API.Models;
 using TrigramBooking.API.Services;
 using TrigramBooking.API.Services.Results;
@@ -46,7 +47,7 @@ namespace TrigramBooking.API.Controllers
 
             if (!resourceResult.Success)
             {
-                return NotFound(new { Message = resourceResult.Error?.Message });
+                return resourceResult.ToErrorResponse();
             }
 
             return Ok(resourceResult.Data);
@@ -60,7 +61,7 @@ namespace TrigramBooking.API.Controllers
 
             if(!resource.Success)
             {
-                return Conflict(new { Message = resource.Error!.Message });
+                return resource.ToErrorResponse();
             }
 
             return CreatedAtAction(nameof(GetResourceById), new { id = resource.Data!.Id }, resource.Data);
@@ -73,18 +74,7 @@ namespace TrigramBooking.API.Controllers
             var resource = await _resourceService.UpdateResourceAsync(id, updateResource);
             if (!resource.Success)
             {
-                switch (resource.Error!.Code)
-                {
-                    case ServiceErrorCode.NotFound:
-                        return NotFound(new { Message = resource.Error.Message });
-                    case ServiceErrorCode.AlreadyExists:
-                        return Conflict(new { Message = resource.Error.Message });
-                    default:
-                        return StatusCode(500, new
-                        {
-                            Message = "An unexpected error occurred."
-                        });
-                }
+                resource.ToErrorResponse();
             }
             //transfer to DTO
             return Ok(resource.Data);
@@ -100,18 +90,7 @@ namespace TrigramBooking.API.Controllers
             //check if exists
             if(!resource.Success)
             {
-                switch (resource.Error!.Code)
-                {
-                    case ServiceErrorCode.NotFound:
-                        return NotFound(new { Message = resource.Error.Message });
-                    case ServiceErrorCode.Conflict:
-                        return Conflict(new { Message = resource.Error.Message });
-                    default:
-                        return StatusCode(500, new
-                        {
-                            Message = "An unexpected error occurred."
-                        });
-                }
+                resource.ToErrorResponse();
             }
             return NoContent();
         }
@@ -124,18 +103,7 @@ namespace TrigramBooking.API.Controllers
 
             if (!resource.Success)
             {
-                switch (resource.Error!.Code)
-                {
-                    case ServiceErrorCode.NotFound:
-                        return NotFound(new { Message = resource.Error.Message });
-                    case ServiceErrorCode.Conflict:
-                        return Conflict(new { Message = resource.Error.Message });
-                    default:
-                        return StatusCode(500, new
-                        {
-                            Message = "An unexpected error occurred."
-                        });
-                }
+                resource.ToErrorResponse();
             }
             return Ok(new { Message = $"Resource {id} has been deactivated successfully." });
         }
@@ -151,18 +119,7 @@ namespace TrigramBooking.API.Controllers
             var resourceAvailabilityResult = await _resourceService.GetResourceAvailabilityAsync(id, date, durationMinutes);
             if(!resourceAvailabilityResult.Success)
             {
-                switch (resourceAvailabilityResult.Error!.Code)
-                {
-                    case ServiceErrorCode.NotFound:
-                        return NotFound(new { Message = resourceAvailabilityResult.Error.Message });
-                    case ServiceErrorCode.InvalidRequest:
-                        return BadRequest(new { Message = resourceAvailabilityResult.Error.Message });
-                    default:
-                        return StatusCode(500, new
-                        {
-                            Message = "An unexpected error occurred."
-                        });
-                }
+                resourceAvailabilityResult.ToErrorResponse();
             }
             
             return Ok(resourceAvailabilityResult.Data);
