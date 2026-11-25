@@ -16,3 +16,7 @@ keep in mind
 Keep in mind some controllers can fail in multiple ways, 
 and the API spec is not always clear on which error code to return. 
 For example, a booking reschedule might fail due to a non-existent booking (404) or an invalid time (400). The API should clearly document the expected error codes for each endpoint.
+
+DeleteResourceAsync service result returns a boolean indicating success or failure,
+this can be changed into a generic result type that includes error codes and messages'
+for better clarity on failure reasons.

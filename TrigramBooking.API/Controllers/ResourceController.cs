@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Runtime.InteropServices;
 using TrigramBooking.API.Data;
 using TrigramBooking.API.DTOs;
 using TrigramBooking.API.Models;
@@ -28,7 +29,6 @@ namespace TrigramBooking.API.Controllers
 
         [HttpGet]
         [Authorize]
-
         public async Task<IActionResult> GetResources(
             [FromQuery] int? capacity,
             [FromQuery] string? category,
@@ -40,7 +40,6 @@ namespace TrigramBooking.API.Controllers
 
         [HttpGet("{id}")]
         [Authorize]
-
         public async Task<IActionResult> GetResourceById(int id)
         {
             var resourceResult = await _resourceService.GetResourcesByIdAsync(id);
@@ -69,96 +68,51 @@ namespace TrigramBooking.API.Controllers
 
         [HttpPut("{id}")]
         [Authorize]
-
         public async Task<IActionResult> UpdateResource(int id, [FromBody] CreateResourceRequest updateResource)
         {
-            var resource = await _context.Resources.FindAsync(id);
-            if (resource == null)
+            var resource = await _resourceService.UpdateResourceAsync(id, updateResource);
+            if (!resource.Success)
             {
-                _logger.LogInformation("Resource update failed: resource {ResourceId} not found", id);
-                return NotFound(new { Message = $"The resource with id:{id} was not found" });
+                switch (resource.Error!.Code)
+                {
+                    case ServiceErrorCode.NotFound:
+                        return NotFound(new { Message = resource.Error.Message });
+                    case ServiceErrorCode.AlreadyExists:
+                        return Conflict(new { Message = resource.Error.Message });
+                    default:
+                        return StatusCode(500, new
+                        {
+                            Message = "An unexpected error occurred."
+                        });
+                }
             }
-
-            //now check for the resource name
-            bool exists = await _context.Resources.AnyAsync(r => r.Name == updateResource.Name && r.Id != id);
-            if (exists)
-            {
-                _logger.LogInformation(
-                    "Resource update rejected: name {ResourceName} is already used by another resource (updating {ResourceId})",
-                    updateResource.Name, id);
-                return Conflict(new { Message = $"A resource named '{updateResource.Name}' already exists." });
-            }
-
-            //update changes
-            resource.Name = updateResource.Name;
-            resource.Description = updateResource.Description;
-            resource.IsActive = updateResource.IsActive;
-            resource.Category = updateResource.Category;
-            resource.Capacity = updateResource.Capacity;
-
-            //persist
-            await _context.SaveChangesAsync();
-
-            _logger.LogInformation(
-                "Resource {ResourceId} updated: Name={ResourceName}, Category={Category}, Capacity={Capacity}, IsActive={IsActive}",
-                resource.Id, resource.Name, resource.Category, resource.Capacity, resource.IsActive);
-
             //transfer to DTO
-            return Ok(new ResourceDto
-            {
-                Id = resource.Id,
-                Name = resource.Name,
-                Description = resource.Description,
-                Capacity = resource.Capacity,
-                IsActive = resource.IsActive,
-                Category = resource.Category
-            });
+            return Ok(resource.Data);
         }
 
         [HttpDelete("{id}")]
         [Authorize]
         public async Task<IActionResult> DeleteResource(int id)
         {
-            _logger.LogInformation("Deleting resource {ResourceId}", id);
-
             //find resource
-            var resource = await _context.Resources.FindAsync(id);
+            var resource = await _resourceService.DeleteResourceAsync(id);
 
             //check if exists
-            if (resource == null)
+            if(!resource.Success)
             {
-                _logger.LogInformation("Resource deletion failed: resource {ResourceId} not found", id);
-                return NotFound(new { Message = $"The resource:{id} was not found" });
+                switch (resource.Error!.Code)
+                {
+                    case ServiceErrorCode.NotFound:
+                        return NotFound(new { Message = resource.Error.Message });
+                    case ServiceErrorCode.Conflict:
+                        return Conflict(new { Message = resource.Error.Message });
+                    default:
+                        return StatusCode(500, new
+                        {
+                            Message = "An unexpected error occurred."
+                        });
+                }
             }
-
-            if (resource.IsActive)
-            {
-                _logger.LogInformation(
-                    "Resource deletion rejected: resource {ResourceId} is still active and must be deactivated first",
-                    id);
-                return Conflict(new { Message = "Please deactivate the resource before deleting it." });
-            }
-
-            bool hasActiveBookings = await _context.Bookings.AnyAsync(b =>
-                b.ResourceId == id
-                && b.EndTimeUtc >= DateTime.UtcNow
-                && b.Status != BookingStatus.Cancelled);
-
-            if (hasActiveBookings)
-            {
-                _logger.LogInformation(
-                    "Resource deletion rejected: resource {ResourceId} has active or upcoming bookings",
-                    id);
-                return Conflict(new { Message = "Cannot delete this resource because it has active or upcoming bookings." });
-            }
-
-            //remove
-            _context.Resources.Remove(resource);
-            await _context.SaveChangesAsync();
-
-            _logger.LogInformation(
-                "Resource {ResourceId} deleted (Name={ResourceName})",
-                id, resource.Name);
             return NoContent();
         }
 
@@ -166,28 +120,26 @@ namespace TrigramBooking.API.Controllers
         [Authorize]
         public async Task<IActionResult> DeactivateResource(int id)
         {
-            var resource = await _context.Resources.FindAsync(id);
+            var resource = await _resourceService.DeactivateResourceAsync(id);
 
-            if (resource == null)
+            if (!resource.Success)
             {
-                _logger.LogInformation("Resource deactivation failed: resource {ResourceId} not found", id);
-                return NotFound(new { Message = $"Resource with ID:{id} was not found" });
+                switch (resource.Error!.Code)
+                {
+                    case ServiceErrorCode.NotFound:
+                        return NotFound(new { Message = resource.Error.Message });
+                    case ServiceErrorCode.Conflict:
+                        return Conflict(new { Message = resource.Error.Message });
+                    default:
+                        return StatusCode(500, new
+                        {
+                            Message = "An unexpected error occurred."
+                        });
+                }
             }
-
-            if (!resource.IsActive)
-            {
-                _logger.LogInformation(
-                    "Resource deactivation rejected: resource {ResourceId} is already deactivated",
-                    id);
-                return Conflict(new { Message = "Resource is already deactivated." });
-            }
-
-            resource.IsActive = false;
-            await _context.SaveChangesAsync();
-
-            _logger.LogInformation("Resource {ResourceId} deactivated", id);
             return Ok(new { Message = $"Resource {id} has been deactivated successfully." });
         }
+        
 
         [HttpGet("{id}/availability")]
         [Authorize]
@@ -196,88 +148,24 @@ namespace TrigramBooking.API.Controllers
             [FromQuery] DateOnly? date = null,
             [FromQuery] int durationMinutes = 60)
         {
-            if (durationMinutes <= 0 || durationMinutes > 1440)
+            var resourceAvailabilityResult = await _resourceService.GetResourceAvailabilityAsync(id, date, durationMinutes);
+            if(!resourceAvailabilityResult.Success)
             {
-                _logger.LogInformation(
-                    "Availability check rejected for resource {ResourceId}: invalid duration {DurationMinutes} minutes",
-                    id, durationMinutes);
-                return BadRequest(new { Message = "Duration must be between 1 and 1440 minutes." });
-            }
-
-            var resourceExists = await _context.Resources
-                .AsNoTracking()
-                .AnyAsync(r => r.Id == id && r.IsActive);
-
-            if (!resourceExists)
-            {
-                _logger.LogInformation(
-                    "Availability check failed: active resource {ResourceId} not found",
-                    id);
-                return NotFound(new { Message = $"Active resource with ID {id} was not found." });
-            }
-
-            DateOnly targetDate = date ?? DateOnly.FromDateTime(DateTime.UtcNow);
-            DateTime dayStartUtc = targetDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-            DateTime dayEndUtc = targetDate.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-            DateTime nowUtc = DateTime.UtcNow;
-
-            var bookings = await _context.Bookings
-                .AsNoTracking()
-                .Where(b => b.ResourceId == id
-                         && b.Status != BookingStatus.Cancelled
-                         && b.StartTimeUtc < dayEndUtc
-                         && b.EndTimeUtc > dayStartUtc)
-                .OrderBy(b => b.StartTimeUtc)
-                .Select(b => new { b.StartTimeUtc, b.EndTimeUtc })
-                .ToListAsync();
-
-            _logger.LogInformation(
-                "Found {BookingCount} non-cancelled bookings for resource {ResourceId} on {TargetDate}",
-                bookings.Count, id, targetDate);
-
-            var validStartWindows = new List<AvailableWindowDto>();
-            DateTime currentPointer = dayStartUtc > nowUtc ? dayStartUtc : nowUtc;
-
-            foreach (var booking in bookings)
-            {
-                if (booking.EndTimeUtc <= currentPointer) continue;
-
-                if (booking.StartTimeUtc > currentPointer)
+                switch (resourceAvailabilityResult.Error!.Code)
                 {
-                    // Calculate max allowed start time for this gap
-                    DateTime maxStartTime = booking.StartTimeUtc.AddMinutes(-durationMinutes);
-
-                    if (maxStartTime >= currentPointer)
-                    {
-                        validStartWindows.Add(new AvailableWindowDto
+                    case ServiceErrorCode.NotFound:
+                        return NotFound(new { Message = resourceAvailabilityResult.Error.Message });
+                    case ServiceErrorCode.InvalidRequest:
+                        return BadRequest(new { Message = resourceAvailabilityResult.Error.Message });
+                    default:
+                        return StatusCode(500, new
                         {
-                            WindowStartUtc = currentPointer,
-                            LatestStartTimeUtc = maxStartTime
+                            Message = "An unexpected error occurred."
                         });
-                    }
-                }
-
-                if (booking.EndTimeUtc > currentPointer)
-                {
-                    currentPointer = booking.EndTimeUtc;
                 }
             }
-
-            // Evaluate tail end of the day
-            DateTime maxTailStartTime = dayEndUtc.AddMinutes(-durationMinutes);
-            if (maxTailStartTime >= currentPointer)
-            {
-                validStartWindows.Add(new AvailableWindowDto
-                {
-                    WindowStartUtc = currentPointer,
-                    LatestStartTimeUtc = maxTailStartTime
-                });
-            }
-
-            _logger.LogInformation(
-                "Availability for resource {ResourceId} on {TargetDate} ({DurationMinutes} min): {WindowCount} window(s) found",
-                id, targetDate, durationMinutes, validStartWindows.Count);
-            return Ok(validStartWindows);
+            
+            return Ok(resourceAvailabilityResult.Data);
         }
     }
 }
