@@ -3,11 +3,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Runtime.InteropServices;
 using TrigramBooking.API.Data;
-using TrigramBooking.API.DTOs;
 using TrigramBooking.API.Extensions;
 using TrigramBooking.API.Models;
 using TrigramBooking.API.Services;
 using TrigramBooking.API.Services.Results;
+using TrigramBooking.Share.DTOs;
 
 namespace TrigramBooking.API.Controllers
 {

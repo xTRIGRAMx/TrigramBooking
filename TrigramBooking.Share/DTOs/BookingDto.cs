@@ -1,6 +1,4 @@
-﻿using TrigramBooking.API.Models;
-
-namespace TrigramBooking.API.DTOs
+﻿namespace TrigramBooking.Share.DTOs
 {
     public class BookingDto
     {
@@ -12,5 +10,10 @@ namespace TrigramBooking.API.DTOs
         public DateTime StartTimeUtc { get; set; }
         public DateTime EndTimeUtc { get; set; }
         public BookingStatus Status { get; set; }
+    }
+    public enum BookingStatus
+    {
+        Confirmed = 0,
+        Cancelled = 1
     }
 }

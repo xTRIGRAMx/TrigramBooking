@@ -1,4 +1,4 @@
-﻿namespace TrigramBooking.API.DTOs
+﻿namespace TrigramBooking.Share.DTOs
 {
     public class CreateResourceRequest
     {

@@ -2,9 +2,9 @@
 using System.Data;
 using TrigramBooking.API.Controllers;
 using TrigramBooking.API.Data;
-using TrigramBooking.API.DTOs;
 using TrigramBooking.API.Models;
 using TrigramBooking.API.Services.Results;
+using TrigramBooking.Share.DTOs;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace TrigramBooking.API.Services
@@ -154,7 +154,7 @@ namespace TrigramBooking.API.Services
             bool hasActiveBookings = await _context.Bookings.AnyAsync(b =>
                 b.ResourceId == id
                 && b.EndTimeUtc >= DateTime.UtcNow
-                && b.Status != BookingStatus.Cancelled);
+                && b.Status != Models.BookingStatus.Cancelled);
 
             if (hasActiveBookings)
             {
@@ -286,7 +286,7 @@ namespace TrigramBooking.API.Services
             var bookings = await _context.Bookings
                 .AsNoTracking()
                 .Where(b => b.ResourceId == resourceId
-                         && b.Status != BookingStatus.Cancelled
+                         && b.Status != Models.BookingStatus.Cancelled
                          && b.StartTimeUtc < dayEndUtc
                          && b.EndTimeUtc > dayStartUtc)
                 .OrderBy(b => b.StartTimeUtc)

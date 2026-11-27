@@ -1,4 +1,4 @@
-﻿namespace TrigramBooking.API.DTOs
+﻿namespace TrigramBooking.Share.DTOs
 {
 
     // TODO:data annotations to DTO's, particularly checking if start date is less than end date, fair

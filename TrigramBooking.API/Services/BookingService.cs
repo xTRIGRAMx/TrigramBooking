@@ -2,10 +2,10 @@
 using Microsoft.EntityFrameworkCore;
 using System.Diagnostics.Metrics;
 using TrigramBooking.API.Data;
-using TrigramBooking.API.DTOs;
 using TrigramBooking.API.Extentions;
 using TrigramBooking.API.Models;
 using TrigramBooking.API.Services.Results;
+using TrigramBooking.Share.DTOs;
 
 
 
@@ -96,7 +96,7 @@ namespace TrigramBooking.API.Services
                 ResourceId = bookingRequest.ResourceId,
                 StartTimeUtc = bookingRequest.StartTimeUtc,
                 EndTimeUtc = bookingRequest.EndTimeUtc,
-                Status = BookingStatus.Confirmed
+                Status = Models.BookingStatus.Confirmed
             };
 
             _context.Bookings.Add(booking);
@@ -149,7 +149,7 @@ namespace TrigramBooking.API.Services
             #region Cancellation Validation
 
             // Check if the booking is already cancelled
-            if (booking.Status == BookingStatus.Cancelled)
+            if (booking.Status == Models.BookingStatus.Cancelled)
             {
                 _logger.LogInformation(
                     "Booking cancellation rejected: booking {BookingId} is already cancelled (ActingUserId={ActingUserId})",
@@ -163,7 +163,7 @@ namespace TrigramBooking.API.Services
 
             #region Booking Cancellation
 
-            booking.Status = BookingStatus.Cancelled;
+            booking.Status = Models.BookingStatus.Cancelled;
 
             await _context.SaveChangesAsync();
 
@@ -180,7 +180,7 @@ namespace TrigramBooking.API.Services
                 Id = booking.Id,
                 StartTimeUtc = booking.StartTimeUtc,
                 EndTimeUtc = booking.EndTimeUtc,
-                Status = booking.Status,
+                Status = (Share.DTOs.BookingStatus)booking.Status,
             };
 
             return ServiceResult<BookingDto>.Successful(bookingDto);
@@ -286,7 +286,7 @@ namespace TrigramBooking.API.Services
                     UserName = b.User.UserName,
                     StartTimeUtc = b.StartTimeUtc,
                     EndTimeUtc = b.EndTimeUtc,
-                    Status = b.Status
+                    Status = (Share.DTOs.BookingStatus)b.Status
                 })
                 .ToListAsync();
 
@@ -315,7 +315,7 @@ namespace TrigramBooking.API.Services
                     EndTimeUtc = b.EndTimeUtc,
                     UserName = b.User.UserName,
                     ResourceName = b.Resource.Name,
-                    Status = b.Status
+                    Status = (Share.DTOs.BookingStatus)b.Status
                 })
                 .FirstOrDefaultAsync();
 
@@ -416,7 +416,7 @@ namespace TrigramBooking.API.Services
             #endregion
 
             #region Booking Status Validation
-            if (booking.Status == BookingStatus.Cancelled)
+            if (booking.Status == Models.BookingStatus.Cancelled)
             {
                 _logger.LogInformation(
                     "Reschedule rejected: booking {BookingId} is cancelled",
@@ -486,7 +486,7 @@ namespace TrigramBooking.API.Services
                 Id = booking.Id,
                 StartTimeUtc = booking.StartTimeUtc,
                 EndTimeUtc = booking.EndTimeUtc,
-                Status = booking.Status,
+                Status = (Share.DTOs.BookingStatus)booking.Status,
                 UserId = booking.UserId,
                 ResourceId = booking.ResourceId
             });
@@ -497,7 +497,7 @@ namespace TrigramBooking.API.Services
         {
             return await _context.Bookings
                 .AnyAsync(b => b.ResourceId == resourceId
-                && b.Status == BookingStatus.Confirmed
+                && b.Status == Models.BookingStatus.Confirmed
                 && (!ignorableId.HasValue || ignorableId.Value != b.Id)
                 && startTime < b.EndTimeUtc
                 && b.StartTimeUtc < endTime);

@@ -1,6 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using TrigramBooking.API.DTOs;
 using TrigramBooking.API.Services.Results;
+using TrigramBooking.Share.DTOs;
 
 namespace TrigramBooking.API.Services
 {

@@ -69,7 +69,8 @@ namespace TrigramBooking.API
                 // 6. Controllers
                 builder.Services.AddControllers();
                 builder.Services.AddScoped<IResourceService, ResourceService>();
-
+                builder.Services.AddScoped<IBookingService, BookingService>();
+                builder.Services.AddScoped<IAuthService, AuthService>();
 
                 // 7. Exception handling
                 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
