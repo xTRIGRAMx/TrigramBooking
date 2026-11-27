@@ -82,7 +82,6 @@ namespace TrigramBooking.API.Controllers
 
         //projection vs eager loading to be studied further
         //TODO Add pagnation to the website
-        [Authorize]
         [HttpGet]
         public async Task<IActionResult> GetBookings(
             [FromQuery] int? userId,

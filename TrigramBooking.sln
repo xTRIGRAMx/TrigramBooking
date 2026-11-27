@@ -7,8 +7,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TrigramBooking.Console", "T
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TrigramBooking.API", "TrigramBooking.API\TrigramBooking.API.csproj", "{8B9B8290-49D1-42E4-B85C-FE3373E80313}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TrigramBooking.Shared1a", "TrigramBooking.Shared\TrigramBooking.Shared1a.csproj", "{17747BD5-7121-4208-B521-A7E008A149FE}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TrigramBooking.Share", "TrigramBooking.Share\TrigramBooking.Share.csproj", "{B4F54EBE-2736-4EB9-8D43-923E587F988B}"
 EndProject
 Global
@@ -25,10 +23,6 @@ Global
 		{8B9B8290-49D1-42E4-B85C-FE3373E80313}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8B9B8290-49D1-42E4-B85C-FE3373E80313}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8B9B8290-49D1-42E4-B85C-FE3373E80313}.Release|Any CPU.Build.0 = Release|Any CPU
-		{17747BD5-7121-4208-B521-A7E008A149FE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{17747BD5-7121-4208-B521-A7E008A149FE}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{17747BD5-7121-4208-B521-A7E008A149FE}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{17747BD5-7121-4208-B521-A7E008A149FE}.Release|Any CPU.Build.0 = Release|Any CPU
 		{B4F54EBE-2736-4EB9-8D43-923E587F988B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{B4F54EBE-2736-4EB9-8D43-923E587F988B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B4F54EBE-2736-4EB9-8D43-923E587F988B}.Release|Any CPU.ActiveCfg = Release|Any CPU
